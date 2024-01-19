@@ -9,6 +9,7 @@ import com.DelioCoder.cafe.constant.CoffeConstants;
 import com.DelioCoder.cafe.dao.UserDao;
 import com.DelioCoder.cafe.interfaces.UserService;
 import com.DelioCoder.cafe.utils.CoffeUtils;
+import com.DelioCoder.cafe.utils.EmailUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -16,12 +17,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -29,6 +28,9 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private UserDao userDao;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Autowired
     private AuthenticationManager authenticationManager;
@@ -42,6 +44,9 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private JwtFilter jwtFilter;
 
+    @Autowired
+    EmailUtils emailUtils;
+
     @Override
     public ResponseEntity<String> signUp(Map<String, String> requestMap) {
 
@@ -54,7 +59,12 @@ public class UserServiceImpl implements UserService {
                 User user = userDao.findByEmail(requestMap.get("email"));
 
                 if(Objects.isNull(user)){
-                    userDao.save(getUserFromMap(requestMap));
+
+                    User newUser = getUserFromMap(requestMap);
+
+                    newUser.setPassword(encodePassword(requestMap.get("password")));
+
+                    userDao.save(newUser);
 
                     return CoffeUtils.getResponseEntity("Successfully Registered", HttpStatus.CREATED);
                 }else {
@@ -107,7 +117,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public ResponseEntity<List<UserDTO>> getAllUser() {
-        log.info("Dentro de get");
+        log.info("inside getAllUserService");
         try {
 
             if(this.jwtFilter.isAdmin())
@@ -121,7 +131,84 @@ public class UserServiceImpl implements UserService {
             ex.printStackTrace();
         }
 
-        return new ResponseEntity<>(new ArrayList<>(), HttpStatus.UNAUTHORIZED);
+        return new ResponseEntity<>(new ArrayList<>(), HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Override
+    public ResponseEntity<String> update(Map<String, String> requestMap) {
+
+        try{
+
+            if(jwtFilter.isAdmin())
+            {
+
+                Optional<User> user = userDao.findById(Integer.parseInt(requestMap.get("id")));
+
+                if(user.isPresent()){
+                    userDao.updateStatus(requestMap.get("status"), Integer.parseInt(requestMap.get("id")));
+
+                    sendEmailToAllAdmin(requestMap.get("status"), user.get().getEmail(), userDao.getAllAdmin());
+
+                    return CoffeUtils.getResponseEntity("User Status Updated Successfully", HttpStatus.OK);
+                }else {
+                    return CoffeUtils.getResponseEntity(CoffeConstants.USER_NOT_FOUND, HttpStatus.OK);
+                }
+
+            }else {
+                return CoffeUtils.getResponseEntity(CoffeConstants.UNAUTHORIZED_ACCESS, HttpStatus.UNAUTHORIZED);
+            }
+
+        }catch (Exception ex){
+            ex.printStackTrace();
+        }
+
+        return CoffeUtils.getResponseEntity(CoffeConstants.SOMETHING_WENT_WRONG, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Override
+    public ResponseEntity<String> checkToken() {
+
+        return CoffeUtils.getResponseEntity("true", HttpStatus.OK);
+    }
+
+    @Override
+    public ResponseEntity<String> changePassword(Map<String, String> requestMap) {
+
+        try{
+
+            User user = userDao.findByEmail(jwtFilter.getCurrentUser());
+
+            if(user != null){
+                if(passwordEncoder.matches(requestMap.get("oldPassword"), user.getPassword())){
+                    user.setPassword(passwordEncoder.encode(requestMap.get("newPassword")));
+                    userDao.save((user));
+
+                    return CoffeUtils.getResponseEntity("Password updated Successfully", HttpStatus.OK);
+                }
+
+                return CoffeUtils.getResponseEntity("Incorrect Old password", HttpStatus.BAD_REQUEST);
+            }
+
+            return CoffeUtils.getResponseEntity(CoffeConstants.SOMETHING_WENT_WRONG, HttpStatus.INTERNAL_SERVER_ERROR);
+
+        }catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        return CoffeUtils.getResponseEntity(CoffeConstants.SOMETHING_WENT_WRONG, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private void sendEmailToAllAdmin(String status, String user, List<String> allAdmin) {
+
+        allAdmin.remove(jwtFilter.getCurrentUser());
+
+        if(status != null && status.equalsIgnoreCase("true"))
+        {
+            emailUtils.sendSimpleMessage(jwtFilter.getCurrentUser(), "Account approved", "USER:- " + user + "\n is approved by \nADMIN:- " + jwtFilter.getCurrentUser(), allAdmin);
+        }else {
+            emailUtils.sendSimpleMessage(jwtFilter.getCurrentUser(), "Account disabled", "USER:- " + user + "\n is disabled by \nADMIN:- " + jwtFilter.getCurrentUser(), allAdmin);
+        }
+
     }
 
     private boolean validateSignUpMap(Map<String, String> requestMap) {
@@ -143,6 +230,10 @@ public class UserServiceImpl implements UserService {
         user.setStatus("false");
         user.setRole("user");
         return user;
+    }
+
+    private String encodePassword(String rawPassword) {
+        return passwordEncoder.encode(rawPassword);
     }
 
 }

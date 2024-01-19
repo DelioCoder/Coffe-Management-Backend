@@ -31,6 +31,8 @@ public class CustomerDetailsService implements UserDetailsService {
 
         if(!Objects.isNull(userDetail))
         {
+            log.info("Usuario cargado: {}", userDetail);
+
             return new org.springframework.security.core.userdetails.User(userDetail.getEmail(), userDetail.getPassword(), new ArrayList<>());
         }
         else {

@@ -9,6 +9,8 @@ import java.io.Serializable;
 
 @NamedQuery(name = "User.findByEmail", query = "SELECT u from User u where u.email = :email")
 @NamedQuery(name = "User.getAllUser", query = "SELECT new com.DelioCoder.cafe.DTO.UserDTO(u.id, u.name, u.email, u.contactNumber, u.status) from User u where u.role = 'user'")
+@NamedQuery(name = "User.updateStatus", query = "UPDATE User u SET u.status = :status where u.id = :id")
+@NamedQuery(name = "User.getAllAdmin", query = "SELECT u.email FROM User u WHERE u.role ='admin'")
 
 @Data // Default constructor, Getters & Setters
 @Entity

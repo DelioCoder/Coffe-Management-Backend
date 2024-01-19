@@ -38,25 +38,25 @@ public class JwtFilter extends OncePerRequestFilter
             String authorizationHeader = request.getHeader("Authorization");
             String token = null;
 
+            // Login
+
             if(authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
                 token = authorizationHeader.substring(7);
                 this.username = jwtUtil.extractUsername(token);
                 claims = jwtUtil.extractAllClaims(token);
             }
 
-            if(username != null && SecurityContextHolder.getContext().getAuthentication() == null){
-                UserDetails userDetails = customerDetailsService.loadUserByUsername(username);
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = this.customerDetailsService.loadUserByUsername(username);
 
-                if(jwtUtil.validateToken(token, userDetails))
-                {
-                    UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken
-                            = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                if (token != null && !token.isEmpty() && jwtUtil.validateToken(token, userDetails)) {
+                    UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken =
+                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
 
-                    new WebAuthenticationDetailsSource().buildDetails(request);
+                    usernamePasswordAuthenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
                 }
-
             }
 
             filterChain.doFilter(request, response);
@@ -64,9 +64,8 @@ public class JwtFilter extends OncePerRequestFilter
 
     }
 
-    public Boolean isAdmin()
-    {
-        return "admin".equalsIgnoreCase((String) claims.get("role"));
+    public Boolean isAdmin() {
+        return claims != null && "admin".equalsIgnoreCase((String) claims.get("role"));
     }
 
     public Boolean isUser()
@@ -74,9 +73,6 @@ public class JwtFilter extends OncePerRequestFilter
         return "user".equalsIgnoreCase((String) claims.get("role"));
     }
 
-    public String getCurrentUser()
-    {
-        return username;
-    }
+    public String getCurrentUser() { return username; }
 
 }
